@@ -2,7 +2,7 @@
 
 API REST para o modulo de Propostas de Credito da Neo Credito.
 
-Este primeiro commit prepara a base do projeto: NestJS, TypeScript, Prisma, PostgreSQL via Docker, configuracao de ambiente, estrutura inicial de banco e comandos de validacao.
+O projeto usa NestJS, TypeScript, Prisma e PostgreSQL. Nesta fase, a API ja possui a base de banco versionada e o fluxo inicial de autenticacao com JWT.
 
 ## Tecnologias
 
@@ -47,7 +47,12 @@ npm run prisma:migrate
 npm run prisma:seed
 ```
 
-## Estrutura inicial
+## Rotas disponiveis
+
+- `POST /auth/login`
+- `GET /auth/me`
+
+## Estrutura
 
 ```text
 src/
@@ -58,10 +63,16 @@ src/
     prisma.service.ts
   modules/
     auth/
+      dto/
+      guards/
+      strategies/
+      types/
     propostas/
     users/
   shared/
+    decorators/
 prisma/
+  migrations/
   schema.prisma
   seed.ts
 test/
