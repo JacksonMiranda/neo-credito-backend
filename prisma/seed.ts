@@ -5,6 +5,20 @@ const prisma = new PrismaClient();
 
 async function main(): Promise<void> {
   const passwordHash = await bcrypt.hash('Teste@2024', 10);
+  const seedCpfs = [
+    '11144477735',
+    '12345678909',
+    '52998224725',
+    '98765432100',
+    '93541134780',
+  ];
+  const legacySeedCpfs = [
+    '11111111111',
+    '22222222222',
+    '33333333333',
+    '44444444444',
+    '55555555555',
+  ];
 
   const corban1 = await prisma.user.upsert({
     where: { email: 'corban1@neocredito.com.br' },
@@ -39,23 +53,17 @@ async function main(): Promise<void> {
   await prisma.proposta.deleteMany({
     where: {
       clienteCpf: {
-        in: [
-          '11111111111',
-          '22222222222',
-          '33333333333',
-          '44444444444',
-          '55555555555',
-        ],
+        in: [...seedCpfs, ...legacySeedCpfs],
       },
     },
   });
 
   await prisma.proposta.createMany({
     data: [
-      propostaSeed('Ana Souza', '11111111111', 3200, 4500, 12, corban1.id),
+      propostaSeed('Ana Souza', seedCpfs[0], 3200, 4500, 12, corban1.id),
       propostaSeed(
         'Bruno Lima',
-        '22222222222',
+        seedCpfs[1],
         5800,
         9000,
         18,
@@ -64,17 +72,17 @@ async function main(): Promise<void> {
       ),
       propostaSeed(
         'Carla Dias',
-        '33333333333',
+        seedCpfs[2],
         9200,
         18000,
         24,
         corban1.id,
         PropostaStatus.APROVADA,
       ),
-      propostaSeed('Diego Rocha', '44444444444', 4100, 7000, 6, corban2.id),
+      propostaSeed('Diego Rocha', seedCpfs[3], 4100, 7000, 6, corban2.id),
       propostaSeed(
         'Elisa Martins',
-        '55555555555',
+        seedCpfs[4],
         7600,
         22000,
         36,

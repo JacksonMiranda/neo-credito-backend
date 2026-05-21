@@ -1,7 +1,7 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { UserRole } from '@prisma/client';
+import { Prisma, PropostaStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
@@ -16,10 +16,34 @@ type UserRecord = {
   updatedAt: Date;
 };
 
-const userId = '11111111-1111-4111-8111-111111111111';
+type PropostaRecord = {
+  id: string;
+  clienteNome: string;
+  clienteCpf: string;
+  clienteRenda: Prisma.Decimal;
+  valorSolicitado: Prisma.Decimal;
+  numeroParcelas: number;
+  taxaMensal: Prisma.Decimal;
+  valorParcela: Prisma.Decimal;
+  totalAPagar: Prisma.Decimal;
+  status: PropostaStatus;
+  motivoReprovacao: string | null;
+  corbanId: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+const ids = {
+  corban1: '11111111-1111-4111-8111-111111111111',
+  corban2: '22222222-2222-4222-8222-222222222222',
+  operador: '33333333-3333-4333-8333-333333333333',
+};
+
+const decimal = (value: number): Prisma.Decimal => new Prisma.Decimal(value);
 
 class FakePrismaService {
   users: UserRecord[] = [];
+  propostas: PropostaRecord[] = [];
 
   user = {
     findUnique: jest.fn(
@@ -30,11 +54,55 @@ class FakePrismaService {
           ) ?? null,
         ),
     ),
+    findFirst: jest.fn(({ where }: { where: { id: string; role: UserRole } }) =>
+      Promise.resolve(
+        this.users.find(
+          (user) => user.id === where.id && user.role === where.role,
+        ) ?? null,
+      ),
+    ),
+  };
+
+  proposta = {
+    create: jest.fn(({ data }: { data: Partial<PropostaRecord> }) => {
+      const now = new Date();
+      const record: PropostaRecord = {
+        id: '44444444-4444-4444-8444-444444444444',
+        clienteNome: String(data.clienteNome),
+        clienteCpf: String(data.clienteCpf),
+        clienteRenda: decimal(Number(data.clienteRenda)),
+        valorSolicitado: decimal(Number(data.valorSolicitado)),
+        numeroParcelas: Number(data.numeroParcelas),
+        taxaMensal: decimal(Number(data.taxaMensal)),
+        valorParcela: decimal(Number(data.valorParcela)),
+        totalAPagar: decimal(Number(data.totalAPagar)),
+        status: PropostaStatus.RASCUNHO,
+        motivoReprovacao: null,
+        corbanId: String(data.corbanId),
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      this.propostas.push(record);
+      return Promise.resolve(this.withCorban(record));
+    }),
   };
 
   async $connect(): Promise<void> {}
 
   async $disconnect(): Promise<void> {}
+
+  private withCorban(record: PropostaRecord) {
+    const corban = this.users.find((user) => user.id === record.corbanId);
+
+    return {
+      ...record,
+      corban: {
+        id: corban?.id ?? record.corbanId,
+        email: corban?.email ?? '',
+      },
+    };
+  }
 }
 
 describe('Autenticacao (e2e)', () => {
@@ -51,10 +119,26 @@ describe('Autenticacao (e2e)', () => {
 
     prisma.users = [
       {
-        id: userId,
+        id: ids.corban1,
         email: 'corban1@neocredito.com.br',
         passwordHash,
         role: UserRole.CORBAN,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: ids.corban2,
+        email: 'corban2@neocredito.com.br',
+        passwordHash,
+        role: UserRole.CORBAN,
+        createdAt: now,
+        updatedAt: now,
+      },
+      {
+        id: ids.operador,
+        email: 'operador@neocredito.com.br',
+        passwordHash,
+        role: UserRole.OPERADOR,
         createdAt: now,
         updatedAt: now,
       },
@@ -92,7 +176,7 @@ describe('Autenticacao (e2e)', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body).toMatchObject({
-          id: userId,
+          id: ids.corban1,
           email: 'corban1@neocredito.com.br',
           role: UserRole.CORBAN,
         });
@@ -126,7 +210,7 @@ describe('Autenticacao (e2e)', () => {
   it('informa quando o token esta expirado', async () => {
     const jwtService = app.get(JwtService);
     const expiredToken = jwtService.sign({
-      sub: userId,
+      sub: ids.corban1,
       email: 'corban1@neocredito.com.br',
       perfil: UserRole.CORBAN,
       exp: Math.floor(Date.now() / 1000) - 60,
@@ -141,20 +225,117 @@ describe('Autenticacao (e2e)', () => {
       });
   });
 
-  async function login(): Promise<string> {
+  it('cria proposta para o CORBAN autenticado', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .post('/propostas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clienteNome: 'Maria Silva',
+        clienteCpf: '111.444.777-35',
+        clienteRenda: 6500,
+        valorSolicitado: 10000,
+        numeroParcelas: 12,
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          clienteNome: 'Maria Silva',
+          clienteCpf: '11144477735',
+          clienteRenda: 6500,
+          valorSolicitado: 10000,
+          numeroParcelas: 12,
+          taxaJuros: 1.89,
+          valorParcela: 939.22,
+          totalAPagar: 11270.64,
+          status: PropostaStatus.RASCUNHO,
+          corbanId: ids.corban1,
+        });
+        expect(body.corban).toMatchObject({
+          id: ids.corban1,
+          email: 'corban1@neocredito.com.br',
+        });
+      });
+  });
+
+  it('permite OPERADOR criar proposta para um CORBAN informado', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .post('/propostas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clienteNome: 'Cliente do Operador',
+        clienteCpf: '12345678909',
+        clienteRenda: 7200,
+        valorSolicitado: 12000,
+        numeroParcelas: 18,
+        corbanId: ids.corban2,
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.corbanId).toBe(ids.corban2);
+        expect(body.status).toBe(PropostaStatus.RASCUNHO);
+      });
+  });
+
+  it('recusa cadastro de proposta sem token', async () => {
+    await request(app.getHttpServer())
+      .post('/propostas')
+      .send({
+        clienteNome: 'Maria Silva',
+        clienteCpf: '11144477735',
+        clienteRenda: 6500,
+        valorSolicitado: 10000,
+        numeroParcelas: 12,
+      })
+      .expect(401);
+  });
+
+  it('recusa CPF com digitos verificadores invalidos', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .post('/propostas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clienteNome: 'Maria Silva',
+        clienteCpf: '12345678901',
+        clienteRenda: 6500,
+        valorSolicitado: 10000,
+        numeroParcelas: 12,
+      })
+      .expect(400);
+  });
+
+  it('exige corbanId quando OPERADOR cria proposta', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .post('/propostas')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        clienteNome: 'Cliente do Operador',
+        clienteCpf: '12345678909',
+        clienteRenda: 7200,
+        valorSolicitado: 12000,
+        numeroParcelas: 18,
+      })
+      .expect(400)
+      .expect(({ body }) => {
+        expect(body.error).toBe('corbanId e obrigatorio para OPERADOR');
+      });
+  });
+
+  async function login(email = 'corban1@neocredito.com.br'): Promise<string> {
     const response = await request(app.getHttpServer())
       .post('/auth/login')
       .send({
-        email: 'corban1@neocredito.com.br',
+        email,
         senha: 'Teste@2024',
       })
       .expect(200);
-
-    expect(response.body.user).toMatchObject({
-      id: userId,
-      email: 'corban1@neocredito.com.br',
-      role: UserRole.CORBAN,
-    });
 
     return response.body.accessToken as string;
   }

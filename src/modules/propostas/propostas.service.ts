@@ -1,0 +1,119 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
+import { Prisma, Proposta, User, UserRole } from '@prisma/client';
+import { PrismaService } from '../../database/prisma.service';
+import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
+import { UsersService } from '../users/users.service';
+import { CreatePropostaDto } from './dto/create-proposta.dto';
+import { PropostaResponseDto } from './dto/proposta-response.dto';
+import { PropostaCalculatorService } from './services/proposta-calculator.service';
+
+type PropostaWithCorban = Proposta & {
+  motivoReprovacao?: string | null;
+  corban: Pick<User, 'id' | 'email'>;
+};
+
+@Injectable()
+export class PropostasService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly usersService: UsersService,
+    private readonly calculator: PropostaCalculatorService,
+  ) {}
+
+  async create(
+    dto: CreatePropostaDto,
+    user: AuthenticatedUser,
+  ): Promise<PropostaResponseDto> {
+    const corbanId = await this.resolveCorbanId(dto, user);
+    const calculation = this.calculator.calculate(
+      dto.valorSolicitado,
+      dto.numeroParcelas,
+    );
+
+    const proposta = await this.prisma.proposta.create({
+      data: {
+        clienteNome: dto.clienteNome,
+        clienteCpf: dto.clienteCpf,
+        clienteRenda: dto.clienteRenda,
+        valorSolicitado: dto.valorSolicitado,
+        numeroParcelas: dto.numeroParcelas,
+        taxaMensal: calculation.taxaMensal,
+        valorParcela: calculation.valorParcela,
+        totalAPagar: calculation.totalAPagar,
+        corbanId,
+      },
+      include: this.includeCorban(),
+    });
+
+    return this.toResponse(proposta);
+  }
+
+  private async resolveCorbanId(
+    dto: CreatePropostaDto,
+    user: AuthenticatedUser,
+  ): Promise<string> {
+    if (user.role === UserRole.CORBAN) {
+      if (dto.corbanId && dto.corbanId !== user.id) {
+        throw new ForbiddenException({
+          error: 'CORBAN so pode criar propostas para seus proprios clientes',
+          details: {},
+        });
+      }
+
+      return user.id;
+    }
+
+    if (!dto.corbanId) {
+      throw new BadRequestException({
+        error: 'corbanId e obrigatorio para OPERADOR',
+        details: {},
+      });
+    }
+
+    const corban = await this.usersService.findCorbanById(dto.corbanId);
+
+    if (!corban) {
+      throw new BadRequestException({
+        error: 'corbanId deve pertencer a um usuario CORBAN',
+        details: { corbanId: dto.corbanId },
+      });
+    }
+
+    return corban.id;
+  }
+
+  private includeCorban(): Prisma.PropostaInclude {
+    return {
+      corban: {
+        select: {
+          id: true,
+          email: true,
+        },
+      },
+    };
+  }
+
+  private toResponse(proposta: PropostaWithCorban): PropostaResponseDto {
+    return {
+      id: proposta.id,
+      clienteNome: proposta.clienteNome,
+      clienteCpf: proposta.clienteCpf,
+      clienteRenda: proposta.clienteRenda.toNumber(),
+      valorSolicitado: proposta.valorSolicitado.toNumber(),
+      numeroParcelas: proposta.numeroParcelas,
+      taxaJuros: proposta.taxaMensal.toNumber(),
+      valorParcela: proposta.valorParcela.toNumber(),
+      totalAPagar: proposta.totalAPagar.toNumber(),
+      status: proposta.status,
+      motivoReprovacao: proposta.motivoReprovacao ?? null,
+      corbanId: proposta.corbanId,
+      corban: proposta.corban,
+      criadoEm: proposta.createdAt,
+      atualizadoEm: proposta.updatedAt,
+    };
+  }
+}
