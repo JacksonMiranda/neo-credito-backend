@@ -68,6 +68,7 @@ src/
       strategies/
       types/
     propostas/
+      services/
     users/
   shared/
     decorators/
