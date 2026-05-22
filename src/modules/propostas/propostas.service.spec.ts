@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma, PropostaStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
@@ -11,6 +15,9 @@ const decimal = (value: number): Prisma.Decimal => new Prisma.Decimal(value);
 type PrismaMock = {
   proposta: {
     create: jest.Mock;
+    findMany: jest.Mock;
+    findUnique: jest.Mock;
+    count: jest.Mock;
   };
 };
 
@@ -30,10 +37,52 @@ describe('PropostasService', () => {
     email: 'operador@neocredito.com.br',
     role: UserRole.OPERADOR,
   };
+  const proposta = (
+    overrides: Partial<{
+      id: string;
+      clienteNome: string;
+      clienteCpf: string;
+      clienteRenda: Prisma.Decimal;
+      valorSolicitado: Prisma.Decimal;
+      numeroParcelas: number;
+      taxaMensal: Prisma.Decimal;
+      valorParcela: Prisma.Decimal;
+      totalAPagar: Prisma.Decimal;
+      status: PropostaStatus;
+      motivoReprovacao: string | null;
+      corbanId: string;
+      corban: { id: string; email: string };
+      createdAt: Date;
+      updatedAt: Date;
+    }> = {},
+  ) => ({
+    id: 'proposta-id',
+    clienteNome: 'Maria Silva',
+    clienteCpf: '11144477735',
+    clienteRenda: decimal(6500),
+    valorSolicitado: decimal(10000),
+    numeroParcelas: 12,
+    taxaMensal: decimal(1.89),
+    valorParcela: decimal(939.22),
+    totalAPagar: decimal(11270.64),
+    status: PropostaStatus.RASCUNHO,
+    motivoReprovacao: null,
+    corbanId: 'corban-id',
+    corban: {
+      id: 'corban-id',
+      email: 'corban1@neocredito.com.br',
+    },
+    createdAt: now,
+    updatedAt: now,
+    ...overrides,
+  });
 
   const prisma = {
     proposta: {
       create: jest.fn(),
+      findMany: jest.fn(),
+      findUnique: jest.fn(),
+      count: jest.fn(),
     },
   } satisfies PrismaMock;
   const usersService = {
@@ -48,26 +97,10 @@ describe('PropostasService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    prisma.proposta.create.mockResolvedValue({
-      id: 'proposta-id',
-      clienteNome: 'Maria Silva',
-      clienteCpf: '11144477735',
-      clienteRenda: decimal(6500),
-      valorSolicitado: decimal(10000),
-      numeroParcelas: 12,
-      taxaMensal: decimal(1.89),
-      valorParcela: decimal(939.22),
-      totalAPagar: decimal(11270.64),
-      status: PropostaStatus.RASCUNHO,
-      motivoReprovacao: null,
-      corbanId: 'corban-id',
-      corban: {
-        id: 'corban-id',
-        email: 'corban1@neocredito.com.br',
-      },
-      createdAt: now,
-      updatedAt: now,
-    });
+    prisma.proposta.create.mockResolvedValue(proposta());
+    prisma.proposta.findMany.mockResolvedValue([proposta()]);
+    prisma.proposta.findUnique.mockResolvedValue(proposta());
+    prisma.proposta.count.mockResolvedValue(1);
   });
 
   it('cria proposta para o proprio CORBAN autenticado', async () => {
@@ -164,5 +197,72 @@ describe('PropostasService', () => {
         operadorUser,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('lista apenas propostas do CORBAN autenticado', async () => {
+    await expect(service.findAll(corbanUser)).resolves.toMatchObject({
+      total: 1,
+      page: 1,
+      limit: 20,
+      data: [{ id: 'proposta-id', corbanId: 'corban-id' }],
+    });
+
+    expect(prisma.proposta.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { corbanId: 'corban-id' },
+        skip: 0,
+        take: 20,
+      }),
+    );
+    expect(prisma.proposta.count).toHaveBeenCalledWith({
+      where: { corbanId: 'corban-id' },
+    });
+  });
+
+  it('lista propostas para OPERADOR com filtros e paginacao', async () => {
+    await service.findAll(operadorUser, {
+      page: 2,
+      limit: 5,
+      status: PropostaStatus.EM_ANALISE,
+      clienteCpf: '111.444.777-35',
+    });
+
+    expect(prisma.proposta.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          status: PropostaStatus.EM_ANALISE,
+          clienteCpf: '11144477735',
+        },
+        skip: 5,
+        take: 5,
+      }),
+    );
+  });
+
+  it('busca uma proposta propria por id', async () => {
+    await expect(
+      service.findOne('proposta-id', corbanUser),
+    ).resolves.toMatchObject({
+      id: 'proposta-id',
+      corbanId: 'corban-id',
+    });
+  });
+
+  it('recusa leitura de proposta de outro CORBAN', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(
+      proposta({ corbanId: 'outro-corban-id' }),
+    );
+
+    await expect(
+      service.findOne('proposta-id', corbanUser),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('retorna erro quando a proposta nao existe', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.findOne('proposta-id', operadorUser),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

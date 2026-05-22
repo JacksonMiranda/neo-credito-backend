@@ -2,12 +2,14 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { Prisma, Proposta, User, UserRole } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { UsersService } from '../users/users.service';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
+import { ListPropostasDto } from './dto/list-propostas.dto';
 import { PropostaResponseDto } from './dto/proposta-response.dto';
 import { PropostaCalculatorService } from './services/proposta-calculator.service';
 
@@ -52,6 +54,60 @@ export class PropostasService {
     return this.toResponse(proposta);
   }
 
+  async findAll(
+    user: AuthenticatedUser,
+    query: ListPropostasDto = {},
+  ): Promise<{
+    data: PropostaResponseDto[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PropostaWhereInput = {};
+    if (user.role === UserRole.CORBAN) {
+      where.corbanId = user.id;
+    }
+    if (query.status) {
+      where.status = query.status;
+    }
+    if (query.clienteCpf) {
+      where.clienteCpf = query.clienteCpf.replace(/\D/g, '');
+    }
+
+    const whereClause = Object.keys(where).length > 0 ? where : undefined;
+    const [propostas, total] = await Promise.all([
+      this.prisma.proposta.findMany({
+        where: whereClause,
+        include: this.includeCorban(),
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.proposta.count({ where: whereClause }),
+    ]);
+
+    return {
+      data: propostas.map((proposta) => this.toResponse(proposta)),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async findOne(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<PropostaResponseDto> {
+    const proposta = await this.findExisting(id);
+    this.assertCanRead(proposta, user);
+
+    return this.toResponse(proposta);
+  }
+
   private async resolveCorbanId(
     dto: CreatePropostaDto,
     user: AuthenticatedUser,
@@ -84,6 +140,45 @@ export class PropostasService {
     }
 
     return corban.id;
+  }
+
+  private async findExisting(id: string): Promise<PropostaWithCorban> {
+    const proposta = await this.prisma.proposta.findUnique({
+      where: { id },
+      include: this.includeCorban(),
+    });
+
+    if (!proposta) {
+      throw new NotFoundException({
+        error: 'Proposta nao encontrada',
+        details: { id },
+      });
+    }
+
+    return proposta;
+  }
+
+  private assertCanRead(
+    proposta: PropostaWithCorban,
+    user: AuthenticatedUser,
+  ): void {
+    if (user.role === UserRole.OPERADOR) {
+      return;
+    }
+
+    this.assertOwnProposta(proposta, user);
+  }
+
+  private assertOwnProposta(
+    proposta: Pick<Proposta, 'corbanId'>,
+    user: AuthenticatedUser,
+  ): void {
+    if (proposta.corbanId !== user.id) {
+      throw new ForbiddenException({
+        error: 'Acesso negado para esta proposta',
+        details: {},
+      });
+    }
   }
 
   private includeCorban(): Prisma.PropostaInclude {

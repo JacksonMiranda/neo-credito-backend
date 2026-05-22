@@ -86,13 +86,102 @@ class FakePrismaService {
       this.propostas.push(record);
       return Promise.resolve(this.withCorban(record));
     }),
+    findMany: jest.fn(
+      ({
+        where,
+        skip,
+        take,
+      }: {
+        where?: {
+          corbanId?: string;
+          status?: PropostaStatus;
+          clienteCpf?: string;
+        };
+        skip?: number;
+        take?: number;
+      } = {}) => {
+        let records = [...this.propostas];
+
+        if (where?.corbanId) {
+          records = records.filter(
+            (proposta) => proposta.corbanId === where.corbanId,
+          );
+        }
+        if (where?.status) {
+          records = records.filter(
+            (proposta) => proposta.status === where.status,
+          );
+        }
+        if (where?.clienteCpf) {
+          records = records.filter(
+            (proposta) => proposta.clienteCpf === where.clienteCpf,
+          );
+        }
+
+        records = records.sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+        if (skip !== undefined) {
+          records = records.slice(skip);
+        }
+        if (take !== undefined) {
+          records = records.slice(0, take);
+        }
+
+        return Promise.resolve(
+          records.map((record) => this.withCorban(record)),
+        );
+      },
+    ),
+    findUnique: jest.fn(({ where }: { where: { id: string } }) =>
+      Promise.resolve(
+        this.withCorban(
+          this.propostas.find((proposta) => proposta.id === where.id) ?? null,
+        ),
+      ),
+    ),
+    count: jest.fn(
+      ({
+        where,
+      }: {
+        where?: {
+          corbanId?: string;
+          status?: PropostaStatus;
+          clienteCpf?: string;
+        };
+      } = {}) => {
+        let records = this.propostas;
+
+        if (where?.corbanId) {
+          records = records.filter(
+            (proposta) => proposta.corbanId === where.corbanId,
+          );
+        }
+        if (where?.status) {
+          records = records.filter(
+            (proposta) => proposta.status === where.status,
+          );
+        }
+        if (where?.clienteCpf) {
+          records = records.filter(
+            (proposta) => proposta.clienteCpf === where.clienteCpf,
+          );
+        }
+
+        return Promise.resolve(records.length);
+      },
+    ),
   };
 
   async $connect(): Promise<void> {}
 
   async $disconnect(): Promise<void> {}
 
-  private withCorban(record: PropostaRecord) {
+  private withCorban(record: PropostaRecord | null) {
+    if (!record) {
+      return null;
+    }
+
     const corban = this.users.find((user) => user.id === record.corbanId);
 
     return {
@@ -142,6 +231,20 @@ describe('Autenticacao (e2e)', () => {
         createdAt: now,
         updatedAt: now,
       },
+    ];
+    prisma.propostas = [
+      proposal(
+        '55555555-5555-4555-8555-555555555555',
+        ids.corban1,
+        PropostaStatus.RASCUNHO,
+        '11144477735',
+      ),
+      proposal(
+        '66666666-6666-4666-8666-666666666666',
+        ids.corban2,
+        PropostaStatus.EM_ANALISE,
+        '12345678909',
+      ),
     ];
 
     const moduleFixture = await Test.createTestingModule({
@@ -328,6 +431,76 @@ describe('Autenticacao (e2e)', () => {
       });
   });
 
+  it('lista apenas propostas do CORBAN autenticado', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .get('/propostas')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.total).toBe(1);
+        expect(body.page).toBe(1);
+        expect(body.limit).toBe(20);
+        expect(
+          body.data.every(
+            (proposta: { corbanId: string }) =>
+              proposta.corbanId === ids.corban1,
+          ),
+        ).toBe(true);
+      });
+  });
+
+  it('lista propostas para OPERADOR com filtro de status e CPF', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .get('/propostas?status=EM_ANALISE&clienteCpf=123.456.789-09')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.total).toBe(1);
+        expect(body.data[0]).toMatchObject({
+          corbanId: ids.corban2,
+          clienteCpf: '12345678909',
+          status: PropostaStatus.EM_ANALISE,
+        });
+      });
+  });
+
+  it('busca uma proposta propria por id', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .get('/propostas/55555555-5555-4555-8555-555555555555')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: '55555555-5555-4555-8555-555555555555',
+          corbanId: ids.corban1,
+        });
+      });
+  });
+
+  it('bloqueia CORBAN tentando consultar proposta de outro CORBAN', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .get('/propostas/66666666-6666-4666-8666-666666666666')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+  });
+
+  it('retorna 404 ao buscar proposta inexistente', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .get('/propostas/77777777-7777-4777-8777-777777777777')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
   async function login(email = 'corban1@neocredito.com.br'): Promise<string> {
     const response = await request(app.getHttpServer())
       .post('/auth/login')
@@ -340,3 +513,29 @@ describe('Autenticacao (e2e)', () => {
     return response.body.accessToken as string;
   }
 });
+
+function proposal(
+  id: string,
+  corbanId: string,
+  status: PropostaStatus,
+  clienteCpf: string,
+): PropostaRecord {
+  const now = new Date();
+
+  return {
+    id,
+    clienteNome: 'Cliente Teste',
+    clienteCpf,
+    clienteRenda: decimal(6500),
+    valorSolicitado: decimal(10000),
+    numeroParcelas: 12,
+    taxaMensal: decimal(1.89),
+    valorParcela: decimal(939.22),
+    totalAPagar: decimal(11270.64),
+    status,
+    motivoReprovacao: null,
+    corbanId,
+    createdAt: now,
+    updatedAt: now,
+  };
+}

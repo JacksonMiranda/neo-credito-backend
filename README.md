@@ -52,6 +52,8 @@ npm run prisma:seed
 - `POST /auth/login`
 - `GET /auth/me`
 - `POST /propostas`
+- `GET /propostas`
+- `GET /propostas/:id`
 
 ## Estrutura
 
