@@ -8,7 +8,10 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { UserRole } from '@prisma/client';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
+import { Roles } from '../../shared/decorators/roles.decorator';
+import { RolesGuard } from '../../shared/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
@@ -17,7 +20,8 @@ import { PropostaResponseDto } from './dto/proposta-response.dto';
 import { PropostasService } from './propostas.service';
 
 @Controller('propostas')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.CORBAN, UserRole.OPERADOR)
 export class PropostasController {
   constructor(private readonly propostasService: PropostasService) {}
 

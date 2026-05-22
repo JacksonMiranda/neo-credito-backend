@@ -76,6 +76,7 @@ src/
     users/
   shared/
     decorators/
+    guards/
 prisma/
   migrations/
   schema.prisma
