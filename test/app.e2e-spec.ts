@@ -4,7 +4,6 @@ import { Test } from '@nestjs/testing';
 import { Prisma, PropostaStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
-import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/database/prisma.service';
 
 type UserRecord = {
@@ -201,6 +200,8 @@ describe('Autenticacao (e2e)', () => {
   beforeEach(async () => {
     process.env.JWT_SECRET = 'test-secret';
     process.env.JWT_EXPIRES_IN = '1h';
+    process.env.AUTH_LOGIN_RATE_LIMIT_MAX = '10';
+    process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS = '60000';
 
     prisma = new FakePrismaService();
     const now = new Date();
@@ -247,6 +248,7 @@ describe('Autenticacao (e2e)', () => {
       ),
     ];
 
+    const { AppModule } = await import('../src/app.module');
     const moduleFixture = await Test.createTestingModule({
       imports: [AppModule],
     })

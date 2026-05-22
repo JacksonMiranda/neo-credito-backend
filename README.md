@@ -29,8 +29,10 @@ npm run prisma:generate
 Veja `.env.example`.
 
 - `DATABASE_URL`: URL de conexao do PostgreSQL usada pelo Prisma
-- `JWT_SECRET`: segredo que sera usado na autenticacao JWT
+- `JWT_SECRET`: segredo obrigatorio usado na autenticacao JWT
 - `JWT_EXPIRES_IN`: tempo de expiracao do token JWT
+- `AUTH_LOGIN_RATE_LIMIT_MAX`: maximo de tentativas por janela no login
+- `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`: janela do rate limit de login em milissegundos
 - `PORT`: porta HTTP da API
 
 Nunca versionar `.env`.
@@ -77,6 +79,7 @@ src/
   shared/
     decorators/
     guards/
+  config/
 prisma/
   migrations/
   schema.prisma

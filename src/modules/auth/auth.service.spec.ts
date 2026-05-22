@@ -45,6 +45,50 @@ describe('AuthService', () => {
         role: UserRole.CORBAN,
       },
     });
+
+    expect(jwtService.signAsync).toHaveBeenCalledWith(
+      {
+        sub: 'user-id',
+        email: 'corban1@neocredito.com.br',
+        perfil: UserRole.CORBAN,
+        corbanId: 'user-id',
+      },
+      { expiresIn: '1h' },
+    );
+  });
+
+  it('usa 8h como expiracao padrao do JWT', async () => {
+    const passwordHash = await bcrypt.hash('Teste@2024', 4);
+    const localJwtService = {
+      signAsync: jest.fn().mockResolvedValue('token-gerado'),
+    } as unknown as JwtService;
+    const defaultConfigService = {
+      get: jest.fn((_key: string, defaultValue: string) => defaultValue),
+    } as unknown as ConfigService;
+
+    usersService.findByEmail.mockResolvedValue({
+      id: 'operador-id',
+      email: 'operador@neocredito.com.br',
+      passwordHash,
+      role: UserRole.OPERADOR,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await new AuthService(
+      usersService,
+      localJwtService,
+      defaultConfigService,
+    ).login('operador@neocredito.com.br', 'Teste@2024');
+
+    expect(localJwtService.signAsync).toHaveBeenCalledWith(
+      {
+        sub: 'operador-id',
+        email: 'operador@neocredito.com.br',
+        perfil: UserRole.OPERADOR,
+      },
+      { expiresIn: '8h' },
+    );
   });
 
   it('recusa email inexistente', async () => {

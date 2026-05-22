@@ -12,6 +12,7 @@ import { AuthService } from './auth.service';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { LoginRateLimitGuard } from './guards/login-rate-limit.guard';
 import { AuthenticatedUser } from './types/authenticated-user.type';
 
 @Controller('auth')
@@ -20,6 +21,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @UseGuards(LoginRateLimitGuard)
   login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     return this.authService.login(dto.email, dto.senha);
   }
