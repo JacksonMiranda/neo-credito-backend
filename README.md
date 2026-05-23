@@ -2,7 +2,7 @@
 
 API REST para o modulo de Propostas de Credito da Neo Credito.
 
-O projeto usa NestJS, TypeScript, Prisma e PostgreSQL. Nesta fase, a API ja possui a base de banco versionada e o fluxo inicial de autenticacao com JWT.
+O projeto usa NestJS, TypeScript, Prisma e PostgreSQL para expor autenticacao JWT e o fluxo de propostas de credito com cadastro, consulta e alteracao de status.
 
 ## Tecnologias
 
@@ -56,6 +56,7 @@ npm run prisma:seed
 - `POST /propostas`
 - `GET /propostas`
 - `GET /propostas/:id`
+- `PATCH /propostas/:id/status`
 
 ## Estrutura
 

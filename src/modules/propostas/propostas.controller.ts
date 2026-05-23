@@ -4,6 +4,7 @@ import {
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -17,6 +18,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
 import { ListPropostasDto } from './dto/list-propostas.dto';
 import { PropostaResponseDto } from './dto/proposta-response.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 import { PropostasService } from './propostas.service';
 
 @Controller('propostas')
@@ -52,5 +54,14 @@ export class PropostasController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<PropostaResponseDto> {
     return this.propostasService.findOne(id, user);
+  }
+
+  @Patch(':id/status')
+  @Roles(UserRole.OPERADOR)
+  updateStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateStatusDto,
+  ): Promise<PropostaResponseDto> {
+    return this.propostasService.updateStatus(id, dto);
   }
 }

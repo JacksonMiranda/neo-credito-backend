@@ -139,6 +139,32 @@ class FakePrismaService {
         ),
       ),
     ),
+    update: jest.fn(
+      ({
+        where,
+        data,
+      }: {
+        where: { id: string };
+        data: {
+          status: PropostaStatus;
+          motivoReprovacao?: string | null;
+        };
+      }) => {
+        const record = this.propostas.find(
+          (proposta) => proposta.id === where.id,
+        );
+
+        if (!record) {
+          return Promise.resolve(null);
+        }
+
+        record.status = data.status;
+        record.motivoReprovacao = data.motivoReprovacao ?? null;
+        record.updatedAt = new Date();
+
+        return Promise.resolve(this.withCorban(record));
+      },
+    ),
     count: jest.fn(
       ({
         where,
@@ -501,6 +527,73 @@ describe('Autenticacao (e2e)', () => {
       .get('/propostas/77777777-7777-4777-8777-777777777777')
       .set('Authorization', `Bearer ${token}`)
       .expect(404);
+  });
+
+  it('bloqueia CORBAN tentando alterar status de proposta', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .patch('/propostas/55555555-5555-4555-8555-555555555555/status')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: PropostaStatus.EM_ANALISE })
+      .expect(403);
+  });
+
+  it('permite OPERADOR enviar proposta em rascunho para analise', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .patch('/propostas/55555555-5555-4555-8555-555555555555/status')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: PropostaStatus.EM_ANALISE })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: '55555555-5555-4555-8555-555555555555',
+          status: PropostaStatus.EM_ANALISE,
+          motivoReprovacao: null,
+        });
+      });
+  });
+
+  it('recusa transicao de rascunho direto para aprovada', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .patch('/propostas/55555555-5555-4555-8555-555555555555/status')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: PropostaStatus.APROVADA })
+      .expect(422);
+  });
+
+  it('exige motivo para reprovar proposta', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .patch('/propostas/66666666-6666-4666-8666-666666666666/status')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: PropostaStatus.REPROVADA })
+      .expect(400);
+  });
+
+  it('permite OPERADOR reprovar proposta em analise com motivo', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .patch('/propostas/66666666-6666-4666-8666-666666666666/status')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        status: PropostaStatus.REPROVADA,
+        motivoReprovacao: 'Score insuficiente',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: '66666666-6666-4666-8666-666666666666',
+          status: PropostaStatus.REPROVADA,
+          motivoReprovacao: 'Score insuficiente',
+        });
+      });
   });
 
   async function login(email = 'corban1@neocredito.com.br'): Promise<string> {

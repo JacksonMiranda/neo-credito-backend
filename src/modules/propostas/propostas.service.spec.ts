@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import { Prisma, PropostaStatus, UserRole } from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
@@ -9,6 +10,7 @@ import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { UsersService } from '../users/users.service';
 import { PropostasService } from './propostas.service';
 import { PropostaCalculatorService } from './services/proposta-calculator.service';
+import { StatusTransitionService } from './services/status-transition.service';
 
 const decimal = (value: number): Prisma.Decimal => new Prisma.Decimal(value);
 
@@ -18,6 +20,7 @@ type PrismaMock = {
     findMany: jest.Mock;
     findUnique: jest.Mock;
     count: jest.Mock;
+    update: jest.Mock;
   };
 };
 
@@ -83,6 +86,7 @@ describe('PropostasService', () => {
       findMany: jest.fn(),
       findUnique: jest.fn(),
       count: jest.fn(),
+      update: jest.fn(),
     },
   } satisfies PrismaMock;
   const usersService = {
@@ -93,6 +97,7 @@ describe('PropostasService', () => {
     prisma as unknown as PrismaService,
     usersService as unknown as UsersService,
     new PropostaCalculatorService(),
+    new StatusTransitionService(),
   );
 
   beforeEach(() => {
@@ -101,6 +106,9 @@ describe('PropostasService', () => {
     prisma.proposta.findMany.mockResolvedValue([proposta()]);
     prisma.proposta.findUnique.mockResolvedValue(proposta());
     prisma.proposta.count.mockResolvedValue(1);
+    prisma.proposta.update.mockResolvedValue(
+      proposta({ status: PropostaStatus.EM_ANALISE }),
+    );
   });
 
   it('cria proposta para o proprio CORBAN autenticado', async () => {
@@ -264,5 +272,68 @@ describe('PropostasService', () => {
     await expect(
       service.findOne('proposta-id', operadorUser),
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('altera status quando a transicao e permitida', async () => {
+    await expect(
+      service.updateStatus('proposta-id', {
+        status: PropostaStatus.EM_ANALISE,
+      }),
+    ).resolves.toMatchObject({
+      id: 'proposta-id',
+      status: PropostaStatus.EM_ANALISE,
+      motivoReprovacao: null,
+    });
+
+    expect(prisma.proposta.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'proposta-id' },
+        data: {
+          status: PropostaStatus.EM_ANALISE,
+          motivoReprovacao: null,
+        },
+      }),
+    );
+  });
+
+  it('persiste motivo quando a proposta e reprovada', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(
+      proposta({ status: PropostaStatus.EM_ANALISE }),
+    );
+    prisma.proposta.update.mockResolvedValue(
+      proposta({
+        status: PropostaStatus.REPROVADA,
+        motivoReprovacao: 'Score insuficiente',
+      }),
+    );
+
+    await expect(
+      service.updateStatus('proposta-id', {
+        status: PropostaStatus.REPROVADA,
+        motivoReprovacao: 'Score insuficiente',
+      }),
+    ).resolves.toMatchObject({
+      status: PropostaStatus.REPROVADA,
+      motivoReprovacao: 'Score insuficiente',
+    });
+
+    expect(prisma.proposta.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          status: PropostaStatus.REPROVADA,
+          motivoReprovacao: 'Score insuficiente',
+        },
+      }),
+    );
+  });
+
+  it('recusa transicao de status invalida', async () => {
+    await expect(
+      service.updateStatus('proposta-id', {
+        status: PropostaStatus.APROVADA,
+      }),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    expect(prisma.proposta.update).not.toHaveBeenCalled();
   });
 });

@@ -4,14 +4,22 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, Proposta, User, UserRole } from '@prisma/client';
+import {
+  Prisma,
+  Proposta,
+  PropostaStatus,
+  User,
+  UserRole,
+} from '@prisma/client';
 import { PrismaService } from '../../database/prisma.service';
 import { AuthenticatedUser } from '../auth/types/authenticated-user.type';
 import { UsersService } from '../users/users.service';
 import { CreatePropostaDto } from './dto/create-proposta.dto';
 import { ListPropostasDto } from './dto/list-propostas.dto';
 import { PropostaResponseDto } from './dto/proposta-response.dto';
+import { UpdateStatusDto } from './dto/update-status.dto';
 import { PropostaCalculatorService } from './services/proposta-calculator.service';
+import { StatusTransitionService } from './services/status-transition.service';
 
 type PropostaWithCorban = Proposta & {
   motivoReprovacao?: string | null;
@@ -24,6 +32,7 @@ export class PropostasService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly calculator: PropostaCalculatorService,
+    private readonly statusTransition: StatusTransitionService,
   ) {}
 
   async create(
@@ -106,6 +115,28 @@ export class PropostasService {
     this.assertCanRead(proposta, user);
 
     return this.toResponse(proposta);
+  }
+
+  async updateStatus(
+    id: string,
+    dto: UpdateStatusDto,
+  ): Promise<PropostaResponseDto> {
+    const proposta = await this.findExisting(id);
+    this.statusTransition.assertCanTransition(proposta.status, dto.status);
+
+    const updatedProposta = await this.prisma.proposta.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        motivoReprovacao:
+          dto.status === PropostaStatus.REPROVADA
+            ? (dto.motivoReprovacao ?? null)
+            : null,
+      },
+      include: this.includeCorban(),
+    });
+
+    return this.toResponse(updatedProposta);
   }
 
   private async resolveCorbanId(
