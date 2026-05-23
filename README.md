@@ -2,7 +2,7 @@
 
 API REST para o modulo de Propostas de Credito da Neo Credito.
 
-O projeto usa NestJS, TypeScript, Prisma e PostgreSQL para expor autenticacao JWT e o fluxo de propostas de credito com cadastro, consulta e alteracao de status.
+O projeto usa NestJS, TypeScript, Prisma e PostgreSQL para expor autenticacao JWT e o fluxo de propostas de credito com cadastro, consulta, alteracao de status e cancelamento logico.
 
 ## Tecnologias
 
@@ -14,6 +14,7 @@ O projeto usa NestJS, TypeScript, Prisma e PostgreSQL para expor autenticacao JW
 - Docker Compose
 - Jest
 - ESLint e Prettier
+- Swagger
 
 ## Configuracao inicial
 
@@ -49,6 +50,13 @@ npm run prisma:migrate
 npm run prisma:seed
 ```
 
+## Documentacao da API
+
+Com a aplicacao em execucao, a documentacao Swagger fica disponivel em:
+
+- `http://localhost:3000/docs`
+- `http://localhost:3000/docs-json`
+
 ## Rotas disponiveis
 
 - `POST /auth/login`
@@ -82,6 +90,7 @@ src/
     users/
   shared/
     decorators/
+    dto/
     guards/
   config/
 prisma/
