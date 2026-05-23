@@ -15,12 +15,16 @@ import { StatusTransitionService } from './services/status-transition.service';
 const decimal = (value: number): Prisma.Decimal => new Prisma.Decimal(value);
 
 type PrismaMock = {
+  $transaction: jest.Mock;
   proposta: {
     create: jest.Mock;
     findMany: jest.Mock;
     findUnique: jest.Mock;
     count: jest.Mock;
     update: jest.Mock;
+  };
+  historicoStatusProposta: {
+    create: jest.Mock;
   };
 };
 
@@ -81,12 +85,16 @@ describe('PropostasService', () => {
   });
 
   const prisma = {
+    $transaction: jest.fn(),
     proposta: {
       create: jest.fn(),
       findMany: jest.fn(),
       findUnique: jest.fn(),
       count: jest.fn(),
       update: jest.fn(),
+    },
+    historicoStatusProposta: {
+      create: jest.fn(),
     },
   } satisfies PrismaMock;
   const usersService = {
@@ -102,6 +110,9 @@ describe('PropostasService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    prisma.$transaction.mockImplementation(
+      (callback: (client: PrismaMock) => unknown) => callback(prisma),
+    );
     prisma.proposta.create.mockResolvedValue(proposta());
     prisma.proposta.findMany.mockResolvedValue([proposta()]);
     prisma.proposta.findUnique.mockResolvedValue(proposta());
@@ -109,6 +120,9 @@ describe('PropostasService', () => {
     prisma.proposta.update.mockResolvedValue(
       proposta({ status: PropostaStatus.EM_ANALISE }),
     );
+    prisma.historicoStatusProposta.create.mockResolvedValue({
+      id: 'historico-id',
+    });
   });
 
   it('cria proposta para o proprio CORBAN autenticado', async () => {
@@ -276,9 +290,13 @@ describe('PropostasService', () => {
 
   it('altera status quando a transicao e permitida', async () => {
     await expect(
-      service.updateStatus('proposta-id', {
-        status: PropostaStatus.EM_ANALISE,
-      }),
+      service.updateStatus(
+        'proposta-id',
+        {
+          status: PropostaStatus.EM_ANALISE,
+        },
+        operadorUser,
+      ),
     ).resolves.toMatchObject({
       id: 'proposta-id',
       status: PropostaStatus.EM_ANALISE,
@@ -294,6 +312,16 @@ describe('PropostasService', () => {
         },
       }),
     );
+    expect(prisma.historicoStatusProposta.create).toHaveBeenCalledWith({
+      data: {
+        propostaId: 'proposta-id',
+        statusAnterior: PropostaStatus.RASCUNHO,
+        statusNovo: PropostaStatus.EM_ANALISE,
+        usuarioId: 'operador-id',
+        perfilUsuario: UserRole.OPERADOR,
+        motivo: null,
+      },
+    });
   });
 
   it('persiste motivo quando a proposta e reprovada', async () => {
@@ -308,10 +336,14 @@ describe('PropostasService', () => {
     );
 
     await expect(
-      service.updateStatus('proposta-id', {
-        status: PropostaStatus.REPROVADA,
-        motivoReprovacao: 'Score insuficiente',
-      }),
+      service.updateStatus(
+        'proposta-id',
+        {
+          status: PropostaStatus.REPROVADA,
+          motivoReprovacao: 'Score insuficiente',
+        },
+        operadorUser,
+      ),
     ).resolves.toMatchObject({
       status: PropostaStatus.REPROVADA,
       motivoReprovacao: 'Score insuficiente',
@@ -325,15 +357,30 @@ describe('PropostasService', () => {
         },
       }),
     );
+    expect(prisma.historicoStatusProposta.create).toHaveBeenCalledWith({
+      data: {
+        propostaId: 'proposta-id',
+        statusAnterior: PropostaStatus.EM_ANALISE,
+        statusNovo: PropostaStatus.REPROVADA,
+        usuarioId: 'operador-id',
+        perfilUsuario: UserRole.OPERADOR,
+        motivo: 'Score insuficiente',
+      },
+    });
   });
 
   it('recusa transicao de status invalida', async () => {
     await expect(
-      service.updateStatus('proposta-id', {
-        status: PropostaStatus.APROVADA,
-      }),
+      service.updateStatus(
+        'proposta-id',
+        {
+          status: PropostaStatus.APROVADA,
+        },
+        operadorUser,
+      ),
     ).rejects.toBeInstanceOf(UnprocessableEntityException);
 
     expect(prisma.proposta.update).not.toHaveBeenCalled();
+    expect(prisma.historicoStatusProposta.create).not.toHaveBeenCalled();
   });
 });

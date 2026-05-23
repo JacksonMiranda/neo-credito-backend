@@ -61,7 +61,8 @@ export class PropostasController {
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStatusDto,
+    @CurrentUser() user: AuthenticatedUser,
   ): Promise<PropostaResponseDto> {
-    return this.propostasService.updateStatus(id, dto);
+    return this.propostasService.updateStatus(id, dto, user);
   }
 }

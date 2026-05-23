@@ -32,6 +32,17 @@ type PropostaRecord = {
   updatedAt: Date;
 };
 
+type HistoricoStatusPropostaRecord = {
+  id: string;
+  propostaId: string;
+  statusAnterior: PropostaStatus;
+  statusNovo: PropostaStatus;
+  usuarioId: string;
+  perfilUsuario: UserRole;
+  motivo: string | null;
+  criadoEm: Date;
+};
+
 const ids = {
   corban1: '11111111-1111-4111-8111-111111111111',
   corban2: '22222222-2222-4222-8222-222222222222',
@@ -43,6 +54,7 @@ const decimal = (value: number): Prisma.Decimal => new Prisma.Decimal(value);
 class FakePrismaService {
   users: UserRecord[] = [];
   propostas: PropostaRecord[] = [];
+  historicoStatus: HistoricoStatusPropostaRecord[] = [];
 
   user = {
     findUnique: jest.fn(
@@ -198,9 +210,60 @@ class FakePrismaService {
     ),
   };
 
+  historicoStatusProposta = {
+    create: jest.fn(
+      ({
+        data,
+      }: {
+        data: {
+          propostaId: string;
+          statusAnterior: PropostaStatus;
+          statusNovo: PropostaStatus;
+          usuarioId: string;
+          perfilUsuario: UserRole;
+          motivo?: string | null;
+        };
+      }) => {
+        const record: HistoricoStatusPropostaRecord = {
+          id: `historico-${this.historicoStatus.length + 1}`,
+          propostaId: data.propostaId,
+          statusAnterior: data.statusAnterior,
+          statusNovo: data.statusNovo,
+          usuarioId: data.usuarioId,
+          perfilUsuario: data.perfilUsuario,
+          motivo: data.motivo ?? null,
+          criadoEm: new Date(),
+        };
+
+        this.historicoStatus.push(record);
+
+        return Promise.resolve(record);
+      },
+    ),
+  };
+
   async $connect(): Promise<void> {}
 
   async $disconnect(): Promise<void> {}
+
+  async $transaction<T>(
+    callback: (client: FakePrismaService) => Promise<T>,
+  ): Promise<T> {
+    const propostasSnapshot = this.propostas.map((proposta) => ({
+      ...proposta,
+    }));
+    const historicoSnapshot = this.historicoStatus.map((historico) => ({
+      ...historico,
+    }));
+
+    try {
+      return await callback(this);
+    } catch (error) {
+      this.propostas = propostasSnapshot;
+      this.historicoStatus = historicoSnapshot;
+      throw error;
+    }
+  }
 
   private withCorban(record: PropostaRecord | null) {
     if (!record) {
@@ -553,6 +616,16 @@ describe('Autenticacao (e2e)', () => {
           status: PropostaStatus.EM_ANALISE,
           motivoReprovacao: null,
         });
+        expect(prisma.historicoStatus).toContainEqual(
+          expect.objectContaining({
+            propostaId: '55555555-5555-4555-8555-555555555555',
+            statusAnterior: PropostaStatus.RASCUNHO,
+            statusNovo: PropostaStatus.EM_ANALISE,
+            usuarioId: ids.operador,
+            perfilUsuario: UserRole.OPERADOR,
+            motivo: null,
+          }),
+        );
       });
   });
 
@@ -593,6 +666,16 @@ describe('Autenticacao (e2e)', () => {
           status: PropostaStatus.REPROVADA,
           motivoReprovacao: 'Score insuficiente',
         });
+        expect(prisma.historicoStatus).toContainEqual(
+          expect.objectContaining({
+            propostaId: '66666666-6666-4666-8666-666666666666',
+            statusAnterior: PropostaStatus.EM_ANALISE,
+            statusNovo: PropostaStatus.REPROVADA,
+            usuarioId: ids.operador,
+            perfilUsuario: UserRole.OPERADOR,
+            motivo: 'Score insuficiente',
+          }),
+        );
       });
   });
 

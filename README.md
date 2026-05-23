@@ -58,6 +58,8 @@ npm run prisma:seed
 - `GET /propostas/:id`
 - `PATCH /propostas/:id/status`
 
+As alteracoes de status das propostas sao registradas em historico interno no banco de dados.
+
 ## Estrutura
 
 ```text

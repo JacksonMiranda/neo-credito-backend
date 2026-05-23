@@ -21,35 +21,54 @@ enum PropostaStatus {
 }
 
 model User {
-  id           String     @id @default(uuid())
-  email        String     @unique
-  passwordHash String
-  role         UserRole
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  propostas    Proposta[] @relation("CorbanPropostas")
+  id              String                    @id @default(uuid())
+  email           String                    @unique
+  passwordHash    String
+  role            UserRole
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+  propostas       Proposta[]                @relation("CorbanPropostas")
+  historicoStatus HistoricoStatusProposta[]
 
   @@map("users")
 }
 
 model Proposta {
-  id               String         @id @default(uuid())
+  id               String                    @id @default(uuid())
   clienteNome      String
   clienteCpf       String
-  clienteRenda     Decimal        @db.Decimal(12, 2)
-  valorSolicitado  Decimal        @db.Decimal(12, 2)
+  clienteRenda     Decimal                   @db.Decimal(12, 2)
+  valorSolicitado  Decimal                   @db.Decimal(12, 2)
   numeroParcelas   Int
-  taxaMensal       Decimal        @db.Decimal(5, 2)
-  valorParcela     Decimal        @db.Decimal(12, 2)
-  totalAPagar      Decimal        @db.Decimal(12, 2)
-  status           PropostaStatus @default(RASCUNHO)
+  taxaMensal       Decimal                   @db.Decimal(5, 2)
+  valorParcela     Decimal                   @db.Decimal(12, 2)
+  totalAPagar      Decimal                   @db.Decimal(12, 2)
+  status           PropostaStatus            @default(RASCUNHO)
   motivoReprovacao String?
   corbanId         String
-  corban           User           @relation("CorbanPropostas", fields: [corbanId], references: [id])
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  corban           User                      @relation("CorbanPropostas", fields: [corbanId], references: [id])
+  historicoStatus  HistoricoStatusProposta[]
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
 
   @@index([corbanId])
   @@index([status])
   @@map("propostas")
+}
+
+model HistoricoStatusProposta {
+  id             String         @id @default(uuid())
+  propostaId     String
+  statusAnterior PropostaStatus
+  statusNovo     PropostaStatus
+  usuarioId      String
+  perfilUsuario  UserRole
+  motivo         String?
+  criadoEm       DateTime       @default(now())
+  proposta       Proposta       @relation(fields: [propostaId], references: [id])
+  usuario        User           @relation(fields: [usuarioId], references: [id])
+
+  @@index([propostaId])
+  @@index([usuarioId])
+  @@map("historico_status_propostas")
 }

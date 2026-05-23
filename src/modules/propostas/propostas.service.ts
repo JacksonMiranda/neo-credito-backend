@@ -26,6 +26,8 @@ type PropostaWithCorban = Proposta & {
   corban: Pick<User, 'id' | 'email'>;
 };
 
+type PropostaReader = Pick<Prisma.TransactionClient, 'proposta'>;
+
 @Injectable()
 export class PropostasService {
   constructor(
@@ -120,23 +122,39 @@ export class PropostasService {
   async updateStatus(
     id: string,
     dto: UpdateStatusDto,
+    user: AuthenticatedUser,
   ): Promise<PropostaResponseDto> {
-    const proposta = await this.findExisting(id);
-    this.statusTransition.assertCanTransition(proposta.status, dto.status);
+    return this.prisma.$transaction(async (tx) => {
+      const proposta = await this.findExisting(id, tx);
+      this.statusTransition.assertCanTransition(proposta.status, dto.status);
 
-    const updatedProposta = await this.prisma.proposta.update({
-      where: { id },
-      data: {
-        status: dto.status,
-        motivoReprovacao:
-          dto.status === PropostaStatus.REPROVADA
-            ? (dto.motivoReprovacao ?? null)
-            : null,
-      },
-      include: this.includeCorban(),
+      const motivo =
+        dto.status === PropostaStatus.REPROVADA
+          ? (dto.motivoReprovacao ?? null)
+          : null;
+
+      const updatedProposta = await tx.proposta.update({
+        where: { id },
+        data: {
+          status: dto.status,
+          motivoReprovacao: motivo,
+        },
+        include: this.includeCorban(),
+      });
+
+      await tx.historicoStatusProposta.create({
+        data: {
+          propostaId: id,
+          statusAnterior: proposta.status,
+          statusNovo: dto.status,
+          usuarioId: user.id,
+          perfilUsuario: user.role,
+          motivo,
+        },
+      });
+
+      return this.toResponse(updatedProposta);
     });
-
-    return this.toResponse(updatedProposta);
   }
 
   private async resolveCorbanId(
@@ -173,8 +191,11 @@ export class PropostasService {
     return corban.id;
   }
 
-  private async findExisting(id: string): Promise<PropostaWithCorban> {
-    const proposta = await this.prisma.proposta.findUnique({
+  private async findExisting(
+    id: string,
+    client: PropostaReader = this.prisma,
+  ): Promise<PropostaWithCorban> {
+    const proposta = await client.proposta.findUnique({
       where: { id },
       include: this.includeCorban(),
     });
