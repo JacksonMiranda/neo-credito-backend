@@ -2,10 +2,14 @@ import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { PropostaStatus } from '@prisma/client';
 
 const ALLOWED_TRANSITIONS: Record<PropostaStatus, PropostaStatus[]> = {
-  [PropostaStatus.RASCUNHO]: [PropostaStatus.EM_ANALISE],
+  [PropostaStatus.RASCUNHO]: [
+    PropostaStatus.EM_ANALISE,
+    PropostaStatus.CANCELADA,
+  ],
   [PropostaStatus.EM_ANALISE]: [
     PropostaStatus.APROVADA,
     PropostaStatus.REPROVADA,
+    PropostaStatus.CANCELADA,
   ],
   [PropostaStatus.APROVADA]: [],
   [PropostaStatus.REPROVADA]: [],

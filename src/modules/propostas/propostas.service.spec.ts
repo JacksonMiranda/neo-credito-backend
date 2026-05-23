@@ -383,4 +383,103 @@ describe('PropostasService', () => {
     expect(prisma.proposta.update).not.toHaveBeenCalled();
     expect(prisma.historicoStatusProposta.create).not.toHaveBeenCalled();
   });
+
+  it('cancela proposta propria em rascunho para CORBAN', async () => {
+    prisma.proposta.update.mockResolvedValue(
+      proposta({ status: PropostaStatus.CANCELADA }),
+    );
+
+    await expect(
+      service.cancel('proposta-id', corbanUser),
+    ).resolves.toMatchObject({
+      id: 'proposta-id',
+      status: PropostaStatus.CANCELADA,
+      motivoReprovacao: null,
+    });
+
+    expect(prisma.proposta.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'proposta-id' },
+        data: {
+          status: PropostaStatus.CANCELADA,
+          motivoReprovacao: null,
+        },
+      }),
+    );
+    expect(prisma.historicoStatusProposta.create).toHaveBeenCalledWith({
+      data: {
+        propostaId: 'proposta-id',
+        statusAnterior: PropostaStatus.RASCUNHO,
+        statusNovo: PropostaStatus.CANCELADA,
+        usuarioId: 'corban-id',
+        perfilUsuario: UserRole.CORBAN,
+        motivo: null,
+      },
+    });
+  });
+
+  it('permite OPERADOR cancelar proposta em analise', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(
+      proposta({ status: PropostaStatus.EM_ANALISE }),
+    );
+    prisma.proposta.update.mockResolvedValue(
+      proposta({ status: PropostaStatus.CANCELADA }),
+    );
+
+    await expect(
+      service.cancel('proposta-id', operadorUser),
+    ).resolves.toMatchObject({
+      status: PropostaStatus.CANCELADA,
+    });
+
+    expect(prisma.historicoStatusProposta.create).toHaveBeenCalledWith({
+      data: {
+        propostaId: 'proposta-id',
+        statusAnterior: PropostaStatus.EM_ANALISE,
+        statusNovo: PropostaStatus.CANCELADA,
+        usuarioId: 'operador-id',
+        perfilUsuario: UserRole.OPERADOR,
+        motivo: null,
+      },
+    });
+  });
+
+  it('recusa CORBAN cancelando proposta de outro CORBAN', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(
+      proposta({ corbanId: 'outro-corban-id' }),
+    );
+
+    await expect(
+      service.cancel('proposta-id', corbanUser),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.proposta.update).not.toHaveBeenCalled();
+    expect(prisma.historicoStatusProposta.create).not.toHaveBeenCalled();
+  });
+
+  it('recusa CORBAN cancelando proposta propria fora de rascunho', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(
+      proposta({ status: PropostaStatus.EM_ANALISE }),
+    );
+
+    await expect(
+      service.cancel('proposta-id', corbanUser),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.proposta.update).not.toHaveBeenCalled();
+    expect(prisma.historicoStatusProposta.create).not.toHaveBeenCalled();
+  });
+
+  it('recusa cancelamento de proposta em status terminal', async () => {
+    prisma.proposta.findUnique.mockResolvedValue(
+      proposta({ status: PropostaStatus.APROVADA }),
+    );
+
+    await expect(
+      service.cancel('proposta-id', operadorUser),
+    ).rejects.toBeInstanceOf(UnprocessableEntityException);
+
+    expect(prisma.proposta.update).not.toHaveBeenCalled();
+    expect(prisma.historicoStatusProposta.create).not.toHaveBeenCalled();
+  });
 });

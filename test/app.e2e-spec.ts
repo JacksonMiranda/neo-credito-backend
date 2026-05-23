@@ -47,6 +47,7 @@ const ids = {
   corban1: '11111111-1111-4111-8111-111111111111',
   corban2: '22222222-2222-4222-8222-222222222222',
   operador: '33333333-3333-4333-8333-333333333333',
+  aprovada: '88888888-8888-4888-8888-888888888888',
 };
 
 const decimal = (value: number): Prisma.Decimal => new Prisma.Decimal(value);
@@ -334,6 +335,12 @@ describe('Autenticacao (e2e)', () => {
         ids.corban2,
         PropostaStatus.EM_ANALISE,
         '12345678909',
+      ),
+      proposal(
+        ids.aprovada,
+        ids.corban2,
+        PropostaStatus.APROVADA,
+        '98765432100',
       ),
     ];
 
@@ -676,6 +683,92 @@ describe('Autenticacao (e2e)', () => {
             motivo: 'Score insuficiente',
           }),
         );
+      });
+  });
+
+  it('permite CORBAN cancelar proposta propria em rascunho', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .delete('/propostas/55555555-5555-4555-8555-555555555555')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: '55555555-5555-4555-8555-555555555555',
+          status: PropostaStatus.CANCELADA,
+          motivoReprovacao: null,
+        });
+        expect(prisma.historicoStatus).toContainEqual(
+          expect.objectContaining({
+            propostaId: '55555555-5555-4555-8555-555555555555',
+            statusAnterior: PropostaStatus.RASCUNHO,
+            statusNovo: PropostaStatus.CANCELADA,
+            usuarioId: ids.corban1,
+            perfilUsuario: UserRole.CORBAN,
+            motivo: null,
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/propostas/55555555-5555-4555-8555-555555555555')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe(PropostaStatus.CANCELADA);
+      });
+  });
+
+  it('bloqueia CORBAN tentando cancelar proposta de outro CORBAN', async () => {
+    const token = await login();
+
+    await request(app.getHttpServer())
+      .delete('/propostas/66666666-6666-4666-8666-666666666666')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+
+    expect(prisma.historicoStatus).toHaveLength(0);
+  });
+
+  it('permite OPERADOR cancelar proposta em analise', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .delete('/propostas/66666666-6666-4666-8666-666666666666')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          id: '66666666-6666-4666-8666-666666666666',
+          status: PropostaStatus.CANCELADA,
+        });
+        expect(prisma.historicoStatus).toContainEqual(
+          expect.objectContaining({
+            propostaId: '66666666-6666-4666-8666-666666666666',
+            statusAnterior: PropostaStatus.EM_ANALISE,
+            statusNovo: PropostaStatus.CANCELADA,
+            usuarioId: ids.operador,
+            perfilUsuario: UserRole.OPERADOR,
+          }),
+        );
+      });
+  });
+
+  it('recusa cancelamento de proposta aprovada', async () => {
+    const token = await login('operador@neocredito.com.br');
+
+    await request(app.getHttpServer())
+      .delete(`/propostas/${ids.aprovada}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(422);
+
+    await request(app.getHttpServer())
+      .get(`/propostas/${ids.aprovada}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe(PropostaStatus.APROVADA);
       });
   });
 

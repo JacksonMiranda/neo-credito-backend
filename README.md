@@ -57,6 +57,7 @@ npm run prisma:seed
 - `GET /propostas`
 - `GET /propostas/:id`
 - `PATCH /propostas/:id/status`
+- `DELETE /propostas/:id`
 
 As alteracoes de status das propostas sao registradas em historico interno no banco de dados.
 

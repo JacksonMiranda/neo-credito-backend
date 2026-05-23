@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -64,5 +65,13 @@ export class PropostasController {
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<PropostaResponseDto> {
     return this.propostasService.updateStatus(id, dto, user);
+  }
+
+  @Delete(':id')
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<PropostaResponseDto> {
+    return this.propostasService.cancel(id, user);
   }
 }

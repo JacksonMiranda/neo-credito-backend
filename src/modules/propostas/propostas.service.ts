@@ -157,6 +157,53 @@ export class PropostasService {
     });
   }
 
+  async cancel(
+    id: string,
+    user: AuthenticatedUser,
+  ): Promise<PropostaResponseDto> {
+    return this.prisma.$transaction(async (tx) => {
+      const proposta = await this.findExisting(id, tx);
+
+      if (user.role === UserRole.CORBAN) {
+        this.assertOwnProposta(proposta, user);
+
+        if (proposta.status !== PropostaStatus.RASCUNHO) {
+          throw new ForbiddenException({
+            error: 'CORBAN so pode cancelar proposta propria em RASCUNHO',
+            details: { currentStatus: proposta.status },
+          });
+        }
+      }
+
+      this.statusTransition.assertCanTransition(
+        proposta.status,
+        PropostaStatus.CANCELADA,
+      );
+
+      const updatedProposta = await tx.proposta.update({
+        where: { id },
+        data: {
+          status: PropostaStatus.CANCELADA,
+          motivoReprovacao: null,
+        },
+        include: this.includeCorban(),
+      });
+
+      await tx.historicoStatusProposta.create({
+        data: {
+          propostaId: id,
+          statusAnterior: proposta.status,
+          statusNovo: PropostaStatus.CANCELADA,
+          usuarioId: user.id,
+          perfilUsuario: user.role,
+          motivo: null,
+        },
+      });
+
+      return this.toResponse(updatedProposta);
+    });
+  }
+
   private async resolveCorbanId(
     dto: CreatePropostaDto,
     user: AuthenticatedUser,

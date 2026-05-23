@@ -32,11 +32,36 @@ describe('StatusTransitionService', () => {
     ).not.toThrow();
   });
 
+  it('permite cancelar proposta em rascunho ou em analise', () => {
+    expect(() =>
+      service.assertCanTransition(
+        PropostaStatus.RASCUNHO,
+        PropostaStatus.CANCELADA,
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      service.assertCanTransition(
+        PropostaStatus.EM_ANALISE,
+        PropostaStatus.CANCELADA,
+      ),
+    ).not.toThrow();
+  });
+
   it('recusa transicao fora do fluxo previsto', () => {
     expect(() =>
       service.assertCanTransition(
         PropostaStatus.RASCUNHO,
         PropostaStatus.APROVADA,
+      ),
+    ).toThrow(UnprocessableEntityException);
+  });
+
+  it('recusa cancelar propostas em status terminal', () => {
+    expect(() =>
+      service.assertCanTransition(
+        PropostaStatus.APROVADA,
+        PropostaStatus.CANCELADA,
       ),
     ).toThrow(UnprocessableEntityException);
   });
