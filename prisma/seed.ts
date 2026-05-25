@@ -12,13 +12,6 @@ async function main(): Promise<void> {
     '98765432100',
     '93541134780',
   ];
-  const legacySeedCpfs = [
-    '11111111111',
-    '22222222222',
-    '33333333333',
-    '44444444444',
-    '55555555555',
-  ];
 
   const corban1 = await prisma.user.upsert({
     where: { email: 'corban1@neocredito.com.br' },
@@ -50,58 +43,46 @@ async function main(): Promise<void> {
     },
   });
 
-  const propostasParaDeletar = await prisma.proposta.findMany({
-    where: { clienteCpf: { in: [...seedCpfs, ...legacySeedCpfs] } },
-    select: { id: true },
-  });
-  const idsParaDeletar = propostasParaDeletar.map((p) => p.id);
-
-  await prisma.historicoStatusProposta.deleteMany({
-    where: { propostaId: { in: idsParaDeletar } },
+  const jaSeeded = await prisma.proposta.findFirst({
+    where: { clienteCpf: { in: seedCpfs } },
   });
 
-  await prisma.proposta.deleteMany({
-    where: {
-      clienteCpf: {
-        in: [...seedCpfs, ...legacySeedCpfs],
-      },
-    },
-  });
-
-  await prisma.proposta.createMany({
-    data: [
-      propostaSeed('Ana Souza', seedCpfs[0], 3200, 4500, 12, corban1.id),
-      propostaSeed(
-        'Bruno Lima',
-        seedCpfs[1],
-        5800,
-        9000,
-        18,
-        corban1.id,
-        PropostaStatus.EM_ANALISE,
-      ),
-      propostaSeed(
-        'Carla Dias',
-        seedCpfs[2],
-        9200,
-        18000,
-        24,
-        corban1.id,
-        PropostaStatus.APROVADA,
-      ),
-      propostaSeed('Diego Rocha', seedCpfs[3], 4100, 7000, 6, corban2.id),
-      propostaSeed(
-        'Elisa Martins',
-        seedCpfs[4],
-        7600,
-        22000,
-        36,
-        corban2.id,
-        PropostaStatus.REPROVADA,
-        'Score insuficiente para aprovacao',
-      ),
-    ],
-  });
+  if (!jaSeeded) {
+    await prisma.proposta.createMany({
+      data: [
+        propostaSeed('Ana Souza', seedCpfs[0], 3200, 4500, 12, corban1.id),
+        propostaSeed(
+          'Bruno Lima',
+          seedCpfs[1],
+          5800,
+          9000,
+          18,
+          corban1.id,
+          PropostaStatus.EM_ANALISE,
+        ),
+        propostaSeed(
+          'Carla Dias',
+          seedCpfs[2],
+          9200,
+          18000,
+          24,
+          corban1.id,
+          PropostaStatus.APROVADA,
+        ),
+        propostaSeed('Diego Rocha', seedCpfs[3], 4100, 7000, 6, corban2.id),
+        propostaSeed(
+          'Elisa Martins',
+          seedCpfs[4],
+          7600,
+          22000,
+          36,
+          corban2.id,
+          PropostaStatus.REPROVADA,
+          'Score insuficiente para aprovacao',
+        ),
+      ],
+    });
+  }
 }
 
 function propostaSeed(
