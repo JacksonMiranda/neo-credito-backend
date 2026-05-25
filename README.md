@@ -18,11 +18,34 @@ O projeto usa NestJS, TypeScript, Prisma e PostgreSQL para expor autenticacao JW
 
 ## Configuracao inicial
 
+Para subir a API e o PostgreSQL com Docker:
+
+```bash
+docker compose up -d --build
+```
+
+Na primeira subida, o container da API aplica as migrations do Prisma. O seed tambem e executado porque o `docker-compose.yml` define `SEED_DATABASE=true`.
+
+Usuarios iniciais criados pelo seed:
+
+- `corban1@neocredito.com.br`
+- `corban2@neocredito.com.br`
+- `operador@neocredito.com.br`
+
+Senha dos usuarios de seed:
+
+- `Teste@2024`
+
+Para rodar a aplicacao localmente usando apenas o PostgreSQL do Docker:
+
 ```bash
 npm install
 cp .env.example .env
-docker compose up -d
+docker compose up -d postgres
 npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:seed
+npm run start:dev
 ```
 
 ## Variaveis de ambiente
@@ -35,6 +58,7 @@ Veja `.env.example`.
 - `AUTH_LOGIN_RATE_LIMIT_MAX`: maximo de tentativas por janela no login
 - `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS`: janela do rate limit de login em milissegundos
 - `PORT`: porta HTTP da API
+- `SEED_DATABASE`: quando `true`, executa seed ao iniciar o container da API
 
 Nunca versionar `.env`.
 
