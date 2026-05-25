@@ -50,6 +50,16 @@ async function main(): Promise<void> {
     },
   });
 
+  const propostasParaDeletar = await prisma.proposta.findMany({
+    where: { clienteCpf: { in: [...seedCpfs, ...legacySeedCpfs] } },
+    select: { id: true },
+  });
+  const idsParaDeletar = propostasParaDeletar.map((p) => p.id);
+
+  await prisma.historicoStatusProposta.deleteMany({
+    where: { propostaId: { in: idsParaDeletar } },
+  });
+
   await prisma.proposta.deleteMany({
     where: {
       clienteCpf: {
