@@ -21,7 +21,7 @@ O projeto usa NestJS, TypeScript, Prisma e PostgreSQL para expor autenticacao JW
 Para subir a API e o PostgreSQL com Docker:
 
 ```bash
-docker compose up -d --build
+docker-compose up -d --build
 ```
 
 Na primeira subida, o container da API aplica as migrations do Prisma. O seed tambem e executado porque o `docker-compose.yml` define `SEED_DATABASE=true`.
@@ -41,7 +41,7 @@ Para rodar a aplicacao localmente usando apenas o PostgreSQL do Docker:
 ```bash
 npm install
 cp .env.example .env
-docker compose up -d postgres
+docker-compose up -d postgres
 npm run prisma:generate
 npm run prisma:migrate
 npm run prisma:seed
