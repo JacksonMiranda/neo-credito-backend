@@ -1,4 +1,4 @@
-import { ExecutionContext } from '@nestjs/common';
+import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@prisma/client';
 import { ROLES_KEY } from '../decorators/roles.decorator';
@@ -35,13 +35,15 @@ describe('RolesGuard', () => {
   it('bloqueia usuario sem perfil permitido', () => {
     reflector.getAllAndOverride.mockReturnValue([UserRole.OPERADOR]);
 
-    expect(guard.canActivate(context(UserRole.CORBAN))).toBe(false);
+    expect(() => guard.canActivate(context(UserRole.CORBAN))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('bloqueia request sem usuario autenticado', () => {
     reflector.getAllAndOverride.mockReturnValue([UserRole.OPERADOR]);
 
-    expect(guard.canActivate(context())).toBe(false);
+    expect(() => guard.canActivate(context())).toThrow(ForbiddenException);
   });
 
   function context(role?: UserRole): ExecutionContext {

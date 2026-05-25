@@ -12,7 +12,6 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { IsCpf } from '../../../shared/validation/cpf.validator';
 
 export class CreatePropostaDto {
   @ApiProperty({
@@ -35,7 +34,6 @@ export class CreatePropostaDto {
   @Matches(/^\d{11}$/, {
     message: 'clienteCpf deve conter 11 digitos numericos',
   })
-  @IsCpf({ message: 'clienteCpf deve ser um CPF valido' })
   clienteCpf: string;
 
   @ApiProperty({

@@ -494,7 +494,7 @@ describe('Autenticacao (e2e)', () => {
       .expect(401);
   });
 
-  it('recusa CPF com digitos verificadores invalidos', async () => {
+  it('recusa CPF com formato invalido', async () => {
     const token = await login();
 
     await request(app.getHttpServer())
@@ -502,7 +502,7 @@ describe('Autenticacao (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({
         clienteNome: 'Maria Silva',
-        clienteCpf: '12345678901',
+        clienteCpf: '123',
         clienteRenda: 6500,
         valorSolicitado: 10000,
         numeroParcelas: 12,

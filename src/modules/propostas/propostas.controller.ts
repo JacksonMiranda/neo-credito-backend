@@ -200,9 +200,9 @@ export class PropostasController {
   @Patch(':id/status')
   @Roles(UserRole.OPERADOR)
   @ApiOperation({
-    summary: 'Atualizar status da proposta',
+    summary: 'Atualizar status da proposta (exclusivo para OPERADOR)',
     description:
-      'Exclusivo para OPERADOR. Transicoes permitidas: RASCUNHO -> EM_ANALISE, RASCUNHO -> CANCELADA e EM_ANALISE -> APROVADA, REPROVADA ou CANCELADA.',
+      'Operacao exclusiva do perfil OPERADOR. Transicoes permitidas: RASCUNHO -> EM_ANALISE, RASCUNHO -> CANCELADA e EM_ANALISE -> APROVADA, REPROVADA ou CANCELADA. O perfil CORBAN nao deve usar este endpoint para cancelar propostas proprias; para isso utilize DELETE /propostas/:id.',
   })
   @ApiBody({
     type: UpdateStatusDto,
@@ -262,7 +262,7 @@ export class PropostasController {
   @ApiOperation({
     summary: 'Cancelar proposta',
     description:
-      'Cancela logicamente a proposta alterando o status para CANCELADA, sem remover o registro.',
+      'Cancela logicamente a proposta alterando o status para CANCELADA, sem remover o registro. CORBAN pode cancelar apenas propostas proprias em RASCUNHO. OPERADOR pode cancelar propostas em RASCUNHO ou EM_ANALISE.',
   })
   @ApiParam({
     name: 'id',

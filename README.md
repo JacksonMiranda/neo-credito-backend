@@ -88,10 +88,18 @@ Com a aplicacao em execucao, a documentacao Swagger fica disponivel em:
 - `POST /propostas`
 - `GET /propostas`
 - `GET /propostas/:id`
-- `PATCH /propostas/:id/status`
+- `PATCH /propostas/:id/status` (exclusivo para OPERADOR)
 - `DELETE /propostas/:id`
 
 As alteracoes de status das propostas sao registradas em historico interno no banco de dados.
+
+### Atualizacao de status vs cancelamento
+
+- `PATCH /propostas/:id/status` e exclusivo do perfil OPERADOR e cobre todas as transicoes de status, incluindo aprovacao, reprovacao e envio para analise. Tambem pode ser usado pelo OPERADOR para cancelar uma proposta em RASCUNHO ou EM_ANALISE enviando `status: CANCELADA`.
+- `DELETE /propostas/:id` e o canal de cancelamento por perfil:
+  - CORBAN cancela apenas propostas proprias em RASCUNHO.
+  - OPERADOR cancela propostas em RASCUNHO ou EM_ANALISE.
+- O CORBAN nao deve tentar cancelar propostas via `PATCH /propostas/:id/status`. Esse endpoint retorna 403 para CORBAN mesmo que o payload contenha `status: CANCELADA`.
 
 ## Estrutura
 
@@ -124,3 +132,23 @@ prisma/
 test/
   app.e2e-spec.ts
 ```
+
+## Decisoes tecnicas
+
+- Escolhi NestJS por oferecer organizacao modular, decorators, guards, pipes e integracao madura com Swagger, o que facilita a separacao entre autenticacao, propostas, validacao e persistencia.
+- Usei Prisma com PostgreSQL para garantir tipagem forte no acesso ao banco, migrations versionadas e clareza no modelo de dominio.
+- Centralizei o calculo de taxa, parcela e total em um servico proprio para manter a regra de negocio isolada e testavel.
+- Separei a validacao de transicoes de status em um servico dedicado para evitar regras espalhadas no controller.
+- Usei JWT stateless com expiracao configuravel por variavel de ambiente.
+- Padronizei a resposta de erro no formato `{ error, details }` por meio de `exceptionFactory` no `ValidationPipe` global e excecoes manuais nos guards e services.
+- Inclui historico de transicoes de status como reforco de rastreabilidade, mesmo nao sendo um endpoint obrigatorio.
+- Optei por validar apenas o formato do CPF (11 digitos numericos, aceitando com ou sem mascara), sem checagem matematica dos digitos verificadores, para nao bloquear CPFs ficticios usados em avaliacao manual.
+
+## O que faria diferente com mais tempo
+
+- Adicionaria endpoint para consulta do historico de status de uma proposta.
+- Criaria testes e2e usando PostgreSQL real em container, alem dos testes com fake Prisma.
+- Adicionaria CI no GitHub Actions para rodar lint, testes e build a cada push.
+- Melhoraria observabilidade com logs estruturados e correlation id.
+- Implementaria paginacao com metadados adicionais, como `totalPages`, `hasNextPage` e `hasPreviousPage`.
+- Adicionaria versionamento de API, por exemplo `/v1`.
